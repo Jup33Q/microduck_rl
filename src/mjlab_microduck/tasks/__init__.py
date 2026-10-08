@@ -6,6 +6,8 @@ from mjlab_microduck.train_hook import maybe_submit_to_hf_jobs
 # train_hook.py). A no-op without the flag.
 maybe_submit_to_hf_jobs()
 
+import os
+
 from mjlab.tasks.registry import register_mjlab_task
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
 
@@ -21,6 +23,16 @@ class MicroduckOnPolicyRunner(VelocityOnPolicyRunner):
         sym = alg.get("symmetry_cfg") if isinstance(alg, dict) else None
         if isinstance(sym, dict) and "_env" in sym:
             alg["symmetry_cfg"] = {k: v for k, v in sym.items() if k != "_env"}
+        # Optional LKG live-stream (MICRODUCK_LKG_STREAM=<port>): wrap the env in a
+        # read-only proxy that publishes env-0 qpos per step. Observational only —
+        # see lkg_stream.py. Installed after super().__init__ so runner/env setup
+        # (and any symmetry _env capture above) all saw the real env.
+        lkg_port = os.environ.get("MICRODUCK_LKG_STREAM")
+        if lkg_port:
+            from mjlab_microduck.lkg_stream import LKGStreamEnvProxy
+
+            self.env = LKGStreamEnvProxy(self.env, int(lkg_port))
+            print(f"[lkg] streaming env 0 qpos to 127.0.0.1:{lkg_port}")
 
 
 from .microduck_velocity_env_cfg import (
